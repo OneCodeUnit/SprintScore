@@ -1,0 +1,251 @@
+:root {
+    --low: #f4746e;
+    --mid: #f0c93f;
+    --high: #82c785;
+    --restart: #f5a623;
+    --ink: #1c1c1c;
+    --muted: #8a8a8a;
+    --line: #e4e4e4;
+    --card-size: 60px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: var(--ink);
+    background: #fff;
+}
+
+.page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+}
+
+/* --- Шапка: заголовок и счётчики ---------------------------------------- */
+
+.head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 32px;
+    margin-bottom: 28px;
+}
+
+.head__title {
+    margin: 0;
+    font-size: 30px;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.head__pick {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.counters {
+    flex: none;
+    font-size: 20px;
+    line-height: 1.4;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.counters b {
+    font-weight: 700;
+}
+
+/* --- Шкала оценок -------------------------------------------------------- */
+
+.scale-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.scale {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: var(--card-size);
+}
+
+.score__card {
+    width: var(--card-size);
+    height: calc(var(--card-size) * 1.25);
+    border: 3px solid transparent;
+    border-radius: 12px;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--ink);
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.score__card--low  { background: var(--low); }
+.score__card--mid  { background: var(--mid); }
+.score__card--high { background: var(--high); }
+
+.score__card:not(:disabled):hover {
+    transform: translateY(-3px);
+}
+
+.score__card:disabled {
+    cursor: default;
+}
+
+.score__card.is-selected {
+    border-color: var(--ink);
+    transform: translateY(-4px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, .18);
+}
+
+.score__card.is-committed {
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, .08), 0 6px 14px rgba(0, 0, 0, .18);
+}
+
+/* Столбик засечек под карточкой — по одной на каждый голос за эту оценку. */
+.score__tally {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+    width: 100%;
+    align-items: center;
+}
+
+.score__tally i {
+    display: block;
+    width: 80%;
+    height: 5px;
+    border-radius: 3px;
+}
+
+.score__tally--low  i { background: var(--low); }
+.score__tally--mid  i { background: var(--mid); }
+.score__tally--high i { background: var(--high); }
+
+.score__count {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* До завершения голосования показывать под карточками нечего — место не резервируем. */
+.score__tally:empty,
+.score__count:empty {
+    display: none;
+}
+
+.average {
+    margin-top: 14px;
+    font-size: 30px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.average--low  { color: var(--low); }
+.average--mid  { color: #d9ab13; }
+.average--high { color: var(--high); }
+.average--none { color: var(--muted); }
+
+/* --- Кнопки -------------------------------------------------------------- */
+
+.actions {
+    margin-top: 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn--primary {
+    background: var(--ink);
+    color: #fff;
+}
+
+.btn--primary:disabled {
+    background: var(--line);
+    color: var(--muted);
+    cursor: default;
+}
+
+.btn--ghost {
+    background: #fff;
+    color: var(--ink);
+    border: 2px solid var(--line);
+}
+
+.btn--restart {
+    background: var(--restart);
+    color: var(--ink);
+}
+
+.hint {
+    margin: 0;
+    flex: 1 1 100%;
+    color: var(--muted);
+    font-size: 15px;
+}
+
+/* --- Баннер переподключения --------------------------------------------- */
+
+.banner {
+    background: var(--restart);
+    color: var(--ink);
+    text-align: center;
+    padding: 10px;
+    font-weight: 600;
+}
+
+/* --- Узкие экраны -------------------------------------------------------- */
+
+@media (max-width: 700px) {
+    :root {
+        --card-size: 48px;
+    }
+
+    .page {
+        padding: 24px 16px 48px;
+    }
+
+    .head {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .head__title {
+        font-size: 24px;
+    }
+
+    .counters {
+        text-align: left;
+        font-size: 17px;
+    }
+
+    .scale {
+        justify-content: center;
+    }
+}

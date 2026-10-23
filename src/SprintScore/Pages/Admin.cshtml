@@ -1,0 +1,22 @@
+@page "/admin"
+@model AdminModel
+@{
+    ViewData["Title"] = "Ведущий";
+    ViewData["Role"] = "admin";
+}
+
+<header class="head">
+    <h1 class="head__title">Ведущий<span class="head__pick" id="pick"></span></h1>
+    <aside class="counters">
+        <div class="counters__line">Онлайн: <b id="online">—</b></div>
+        <div class="counters__line">Проголосовали <b id="voted">—</b> из <b id="total">—</b></div>
+    </aside>
+</header>
+
+<partial name="_Scale" />
+
+<div class="actions">
+    <button type="button" id="reveal" class="btn btn--primary">Завершить голосование</button>
+    <button type="button" id="restart" class="btn btn--restart">Заново</button>
+    <p class="hint" id="hint">Голосование идёт. Вы не участвуете в нём и не попадаете в счётчик онлайн.</p>
+</div>

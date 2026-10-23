@@ -1,0 +1,23 @@
+@using SprintScore.Voting
+@{
+    // Шкала оценок: карточки 1–10 и место под столбики результатов.
+    // Интерактивность включает app.js — на странице ведущего карточки только показывают итог.
+    static string Category(int score) => score <= 4 ? "low" : score <= 7 ? "mid" : "high";
+}
+<div class="scale-row">
+    <div class="scale">
+        @for (var score = VotingSession.MinScore; score <= VotingSession.MaxScore; score++)
+        {
+            <div class="score">
+                <button type="button"
+                        class="score__card score__card--@Category(score)"
+                        data-score="@score"
+                        aria-pressed="false"
+                        aria-label="Оценка @score">@score</button>
+                <div class="score__tally score__tally--@Category(score)" data-tally="@score"></div>
+                <div class="score__count" data-count="@score"></div>
+            </div>
+        }
+    </div>
+    <div class="average" id="average" hidden></div>
+</div>

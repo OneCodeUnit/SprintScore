@@ -1,0 +1,22 @@
+@{
+    var role = (ViewData["Role"] as string) ?? "participant";
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] — SprintScore</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body data-role="@role">
+    <div id="reconnect-banner" class="banner" hidden>Переподключение…</div>
+
+    <main class="page">
+        @RenderBody()
+    </main>
+
+    <script src="~/lib/signalr/signalr.min.js"></script>
+    <script src="~/js/app.js" asp-append-version="true"></script>
+</body>
+</html>
