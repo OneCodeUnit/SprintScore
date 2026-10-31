@@ -43,6 +43,12 @@ dotnet run --project src/SprintScore
 dotnet test
 ```
 
+## Развёртывание
+
+На сервере приложение работает в Docker за обратным прокси Caddy.
+Образ собирается в GitHub Actions и публикуется в `ghcr.io/onecodeunit/sprintscore`.
+Пошаговая инструкция — [DEPLOY.md](DEPLOY.md).
+
 ## Устройство
 
 | Файл | Назначение |

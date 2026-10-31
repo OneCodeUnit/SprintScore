@@ -1,0 +1,19 @@
+# Приложение не публикует порты наружу: до него ходит только Caddy
+# по общей docker-сети. Имя сети задаётся в .env (CADDY_NETWORK).
+services:
+  sprintscore:
+    image: ${SPRINTSCORE_IMAGE:-ghcr.io/onecodeunit/sprintscore:latest}
+    container_name: sprintscore
+    restart: unless-stopped
+    networks:
+      - caddy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  caddy:
+    name: ${CADDY_NETWORK:-caddy}
+    external: true

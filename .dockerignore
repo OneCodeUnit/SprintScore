@@ -1,0 +1,19 @@
+# Всё, что не нужно в контексте сборки: артефакты, IDE, локальные настройки.
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+.git/
+.github/
+.claude/
+**/node_modules/
+**/*.user
+**/*.suo
+Dockerfile
+.dockerignore
+docker-compose*.yml
+.env
+DEPLOY.md
+README.md
+LICENSE

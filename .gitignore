@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Локальные настройки развёртывания (образец — .env.example)
+.env

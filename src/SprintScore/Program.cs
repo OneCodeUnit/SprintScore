@@ -21,4 +21,7 @@ app.UseRouting();
 app.MapRazorPages();
 app.MapHub<VotingHub>("/hub");
 
+// Проверка живости: HEALTHCHECK в контейнере и мониторинг снаружи.
+app.MapGet("/healthz", () => Results.Text("ok"));
+
 app.Run();
