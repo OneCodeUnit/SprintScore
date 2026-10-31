@@ -22,14 +22,61 @@
 Аутентификации нет: ведущим становится любой, кто открыл `/admin`.
 Ведущий не голосует и не входит в счётчик онлайн.
 
-## Стек
+## Быстрый старт в Docker
 
-- ASP.NET Core 10, Razor Pages
-- SignalR — синхронизация в реальном времени
-- Состояние — in-memory, без базы данных (перезапуск приложения сбрасывает голосование)
-- Фронтенд — обычные JS и CSS, без сборки и npm
+Создайте файл `docker-compose.yml`:
 
-## Запуск
+```yaml
+services:
+  sprintscore:
+    image: ghcr.io/onecodeunit/sprintscore:latest
+    container_name: sprintscore
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+```
+
+и поднимите:
+
+```bash
+docker compose up -d
+```
+
+Можно открыть:
+
+- `http://localhost:8080` — страница участника;
+- `http://localhost:8080/admin` — страница ведущего.
+
+Чтобы подключилась команда, раздайте коллегам адрес машины в локальной сети. Порт 8080 при этом должен быть открыт.
+
+### Собрать образ из исходников
+
+```bash
+git clone https://github.com/OneCodeUnit/SprintScore.git
+cd SprintScore
+docker compose up -d --build
+```
+
+Теги всех сборок видны на странице пакета:
+[Packages → sprintscore](https://github.com/OneCodeUnit/SprintScore/pkgs/container/sprintscore).
+
+Внутри контейнера приложение всегда слушает HTTP на порту 8080 и работает не от root.
+HTTPS образ не терминирует: чтобы открыть сервис в интернет, поставьте перед ним
+обратный прокси.
+
+### О чём помнить
+
+- Голоса лежат в памяти процесса, поэтому **перезапуск контейнера обнуляет голосование**.
+- По той же причине должен работать **ровно один экземпляр**: несколько реплик разъедутся
+  по состоянию, а SignalR без backplane не свяжет их между собой.
+- Здоровье — `GET /healthz`. В образе настроен `HEALTHCHECK`, поэтому `docker compose ps`
+  показывает реальное состояние приложения, а не только то, что процесс запущен.
+- Образ собран под `linux/amd64`. На Apple Silicon и других ARM-машинах Docker запустит
+  его через эмуляцию — работать будет, но медленнее и с предупреждением; на ARM-сервере
+  без настроенного binfmt он не стартует. В этом случае соберите образ из исходников.
+## Запуск из исходников
+
+Нужен [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```bash
 dotnet run --project src/SprintScore
@@ -43,11 +90,12 @@ dotnet run --project src/SprintScore
 dotnet test
 ```
 
-## Развёртывание
+## Стек
 
-На сервере приложение работает в Docker за обратным прокси Caddy.
-Образ собирается в GitHub Actions и публикуется в `ghcr.io/onecodeunit/sprintscore`.
-Пошаговая инструкция — [DEPLOY.md](DEPLOY.md).
+- ASP.NET Core 10, Razor Pages
+- SignalR — синхронизация в реальном времени
+- Состояние — in-memory, без базы данных (перезапуск приложения сбрасывает голосование)
+- Фронтенд — обычные JS и CSS, без сборки и npm
 
 ## Устройство
 
