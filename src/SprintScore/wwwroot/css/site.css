@@ -203,6 +203,15 @@ body {
     color: var(--ink);
 }
 
+.actions--admin { align-items: flex-start; }
+.admin-vote { display: grid; grid-template-columns: auto 42px 32px; grid-template-rows: 45px auto; align-items: center; column-gap: 8px; }
+.admin-vote label { color: var(--ink); font-size: 18px; font-weight: 600; white-space: nowrap; }
+.admin-vote__status { grid-column: 1 / -1; min-height: 20px; color: #278144; font-size: 14px; line-height: 20px; }
+.admin-vote__status.is-error { color: #bd302a; }
+.admin-vote input { width: 42px; height: 40px; padding: 4px; border: 2px solid var(--line); border-radius: 10px; font-size: 18px; text-align: center; }
+.admin-vote__clear { width: 32px; height: 40px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 24px; cursor: pointer; }
+.admin-vote__clear:hover:not(:disabled) { background: var(--line); color: var(--ink); }
+
 .hint {
     margin: 0;
     flex: 1 1 100%;

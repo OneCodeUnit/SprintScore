@@ -7,8 +7,9 @@ namespace SprintScore.Voting;
 /// </summary>
 /// <param name="Round">Номер раунда. Меняется при нажатии «Заново» — клиент по этому сбрасывает выбор.</param>
 /// <param name="Revealed">Голосование завершено, результаты раскрыты.</param>
-/// <param name="OnlineCount">Число участников на странице (ведущий не считается).</param>
+/// <param name="OnlineCount">Число участников онлайн, включая ведущего.</param>
 /// <param name="VotedCount">Число участников, подтвердивших оценку.</param>
+/// <param name="TotalCount">Число участников, учитываемых в счётчике голосования.</param>
 /// <param name="Average">Средняя оценка, округлённая до двух знаков. null, если голосов нет.</param>
 /// <param name="Distribution">Число голосов за каждую оценку: индекс 0 — оценка 1, индекс 9 — оценка 10.</param>
 public sealed record VotingStateDto(
@@ -16,6 +17,7 @@ public sealed record VotingStateDto(
     bool Revealed,
     int OnlineCount,
     int VotedCount,
+    int TotalCount,
     double? Average,
     int[]? Distribution);
 

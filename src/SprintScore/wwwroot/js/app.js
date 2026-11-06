@@ -23,7 +23,10 @@
         confirm: document.getElementById("confirm"),
         retract: document.getElementById("retract"),
         reveal: document.getElementById("reveal"),
-        restart: document.getElementById("restart")
+        restart: document.getElementById("restart"),
+        adminVote: document.getElementById("admin-vote"),
+        adminStatus: document.getElementById("admin-vote-status"),
+        adminClear: document.getElementById("admin-vote-clear")
     };
 
     /** Стабильный идентификатор участника: переживает F5 и объединяет вкладки одного человека. */
@@ -51,6 +54,12 @@
 
     hub.on("Sync", function (self) {
         round = self.round;
+        if (IS_ADMIN) {
+            el.adminVote.value = self.myVote === null ? "" : String(self.myVote);
+            updateAdminStatus();
+            render();
+            return;
+        }
         committed = self.myVote;
         selected = self.myVote;
         render();
@@ -61,6 +70,10 @@
         if (round !== null && state.round !== round) {
             selected = null;
             committed = null;
+            if (IS_ADMIN) {
+                el.adminVote.value = "";
+                updateAdminStatus();
+            }
         }
         round = state.round;
         revealed = state.revealed;
@@ -87,7 +100,7 @@
     function applyState(state) {
         el.online.textContent = state.onlineCount;
         el.voted.textContent = state.votedCount;
-        el.total.textContent = state.onlineCount;
+        el.total.textContent = state.totalCount;
 
         var distribution = state.distribution;
 
@@ -134,9 +147,11 @@
 
         if (IS_ADMIN) {
             el.reveal.disabled = revealed;
+            el.adminVote.disabled = revealed;
+            el.adminClear.disabled = revealed;
             el.hint.textContent = revealed
                 ? "Голосование завершено. «Заново» очистит голоса и откроет новый раунд."
-                : "Голосование идёт. Вы не участвуете в нём и не попадаете в счётчик онлайн.";
+                : "Голосование идёт. Вы можете ввести свою оценку.";
             return;
         }
 
@@ -178,6 +193,19 @@
             });
     }
 
+    function adminValue() {
+        var value = el.adminVote.value.trim();
+        return /^(10|[1-9])$/.test(value) ? Number(value) : null;
+    }
+
+    function updateAdminStatus() {
+        var empty = el.adminVote.value.trim() === "";
+        var valid = adminValue() !== null;
+        el.adminStatus.textContent = empty ? "" : valid ? "Оценка введена" : "Введите целое число от 1 до 10";
+        el.adminStatus.classList.toggle("is-error", !empty && !valid);
+        el.adminVote.setAttribute("aria-invalid", String(!empty && !valid));
+    }
+
     if (!IS_ADMIN) {
         el.confirm.addEventListener("click", function () {
             if (selected === null) {
@@ -197,8 +225,29 @@
             });
         });
     } else {
-        el.reveal.addEventListener("click", function () { invoke("Reveal"); });
-        el.restart.addEventListener("click", function () { invoke("Restart"); });
+        var adminQueue = Promise.resolve();
+        function enqueue(method, value) {
+            adminQueue = adminQueue.then(function () { return invoke(method, value); });
+        }
+        el.adminVote.addEventListener("input", function () {
+            updateAdminStatus();
+            enqueue("SetAdminVote", adminValue());
+        });
+        el.adminClear.addEventListener("click", function () {
+            el.adminVote.value = "";
+            updateAdminStatus();
+            enqueue("SetAdminVote", null);
+            el.adminVote.focus();
+        });
+        el.reveal.addEventListener("click", function () {
+            if (adminValue() === null) { el.adminVote.value = ""; updateAdminStatus(); }
+            enqueue("Reveal");
+        });
+        el.restart.addEventListener("click", function () {
+            el.adminVote.value = "";
+            updateAdminStatus();
+            enqueue("Restart");
+        });
     }
 
     render();

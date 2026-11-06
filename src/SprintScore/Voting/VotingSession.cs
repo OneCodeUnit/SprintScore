@@ -16,6 +16,7 @@ public sealed class VotingSession
 
     /// <summary>connectionId → participantId. Нужен, чтобы по обрыву связи найти участника.</summary>
     private readonly Dictionary<string, string> _owners = new();
+    private readonly HashSet<string> _adminConnections = new();
 
     /// <summary>participantId → подтверждённая оценка.</summary>
     private readonly Dictionary<string, int> _votes = new();
@@ -26,13 +27,13 @@ public sealed class VotingSession
     private readonly TimeProvider _time;
 
     private bool _revealed;
+    private int? _adminVote;
     private int _round = 1;
 
     public VotingSession(TimeProvider time) => _time = time;
 
     /// <summary>
-    /// Регистрирует соединение участника. Соединения ведущего (<paramref name="isAdmin"/>)
-    /// не учитываются нигде: ведущий не участник и в счётчики не входит.
+    /// Регистрирует соединение участника или ведущего.
     /// </summary>
     /// <returns>Личное состояние участника: его текущий голос и номер раунда.</returns>
     public SelfStateDto Connect(string participantId, string connectionId, bool isAdmin)
@@ -41,7 +42,8 @@ public sealed class VotingSession
         {
             if (isAdmin)
             {
-                return new SelfStateDto(null, _round);
+                _adminConnections.Add(connectionId);
+                return new SelfStateDto(_adminVote, _round);
             }
 
             if (!_connections.TryGetValue(participantId, out var set))
@@ -66,6 +68,7 @@ public sealed class VotingSession
     {
         lock (_gate)
         {
+            if (_adminConnections.Remove(connectionId)) return;
             if (!_owners.Remove(connectionId, out var participantId))
             {
                 return;
@@ -110,13 +113,23 @@ public sealed class VotingSession
         }
     }
 
+    public bool SetAdminVote(int? score)
+    {
+        lock (_gate)
+        {
+            if (_revealed || (score.HasValue && score is < MinScore or > MaxScore) || _adminVote == score)
+                return false;
+            _adminVote = score;
+            return true;
+        }
+    }
+
     /// <summary>Завершает голосование и раскрывает результаты. Результаты после этого заморожены.</summary>
     public void Reveal()
     {
         lock (_gate)
         {
             _revealed = true;
-            _pendingDepartures.Clear();
         }
     }
 
@@ -126,7 +139,7 @@ public sealed class VotingSession
         lock (_gate)
         {
             _votes.Clear();
-            _pendingDepartures.Clear();
+            _adminVote = null;
             _revealed = false;
             _round++;
         }
@@ -134,15 +147,14 @@ public sealed class VotingSession
 
     /// <summary>
     /// Окончательно удаляет участников, которые отсутствуют дольше <paramref name="grace"/>,
-    /// вместе с их голосами. Иначе ушедший после голосования участник давал бы «9 из 8».
-    /// После завершения голосования ничего не делает — результаты не должны меняться.
+    /// вместе с их голосами. После завершения голосования голоса сохраняются.
     /// </summary>
     /// <returns><c>true</c>, если кто-то был удалён.</returns>
     public bool SweepDepartures(TimeSpan grace)
     {
         lock (_gate)
         {
-            if (_revealed || _pendingDepartures.Count == 0)
+            if (_pendingDepartures.Count == 0)
             {
                 return false;
             }
@@ -153,7 +165,7 @@ public sealed class VotingSession
             foreach (var participantId in gone)
             {
                 _pendingDepartures.Remove(participantId);
-                _votes.Remove(participantId);
+                if (!_revealed) _votes.Remove(participantId);
             }
 
             return gone.Count > 0;
@@ -167,28 +179,29 @@ public sealed class VotingSession
         {
             double? average = null;
             int[]? distribution = null;
+            var scores = _adminVote.HasValue ? _votes.Values.Append(_adminVote.Value).ToArray() : _votes.Values.ToArray();
 
             if (_revealed)
             {
                 distribution = new int[MaxScore];
-                foreach (var score in _votes.Values)
+                foreach (var score in scores)
                 {
                     distribution[score - 1]++;
                 }
 
-                if (_votes.Count > 0)
+                if (scores.Length > 0)
                 {
-                    average = Math.Round(_votes.Values.Average(), 2, MidpointRounding.AwayFromZero);
+                    average = Math.Round(scores.Average(), 2, MidpointRounding.AwayFromZero);
                 }
             }
 
             return new VotingStateDto(
                 Round: _round,
                 Revealed: _revealed,
-                // Участники в «ожидании ухода» считаются присутствующими: иначе перезагрузка
-                // страницы на секунду показывала бы всем «проголосовали 3 из 2».
-                OnlineCount: _connections.Count + _pendingDepartures.Count,
-                VotedCount: _votes.Count,
+                OnlineCount: _connections.Count + (_adminConnections.Count > 0 ? 1 : 0),
+                VotedCount: scores.Length,
+                // Сохранённые голоса учитываются в общем числе участников, но не в онлайне.
+                TotalCount: _connections.Keys.Union(_pendingDepartures.Keys).Union(_votes.Keys).Count() + (_adminConnections.Count > 0 || _adminVote.HasValue ? 1 : 0),
                 Average: average,
                 Distribution: distribution);
         }

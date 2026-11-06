@@ -15,8 +15,14 @@
 
 <partial name="_Scale" />
 
-<div class="actions">
+<div class="actions actions--admin">
     <button type="button" id="reveal" class="btn btn--primary">Завершить голосование</button>
     <button type="button" id="restart" class="btn btn--restart">Заново</button>
-    <p class="hint" id="hint">Голосование идёт. Вы не участвуете в нём и не попадаете в счётчик онлайн.</p>
+    <div class="admin-vote">
+        <label for="admin-vote">Оценка ведущего</label>
+        <input id="admin-vote" type="password" inputmode="numeric" autocomplete="off" aria-describedby="admin-vote-status" />
+        <button type="button" id="admin-vote-clear" class="admin-vote__clear" aria-label="Очистить оценку ведущего">×</button>
+        <span id="admin-vote-status" class="admin-vote__status" aria-live="polite"></span>
+    </div>
+    <p class="hint" id="hint">Голосование идёт. Вы можете ввести свою оценку.</p>
 </div>

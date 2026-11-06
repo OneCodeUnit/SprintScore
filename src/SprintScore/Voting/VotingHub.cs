@@ -68,6 +68,15 @@ public sealed class VotingHub : Hub
         }
     }
 
+    public async Task SetAdminVote(int? score)
+    {
+        RequireAdmin();
+        if (score.HasValue && score is < VotingSession.MinScore or > VotingSession.MaxScore)
+            throw new HubException("Оценка должна быть от 1 до 10.");
+        if (_session.SetAdminVote(score))
+            await BroadcastAsync();
+    }
+
     /// <summary>Завершить голосование и раскрыть результаты. Только для ведущего.</summary>
     public async Task Reveal()
     {

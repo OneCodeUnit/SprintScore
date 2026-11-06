@@ -106,13 +106,49 @@ public class VotingSessionTests
     }
 
     [Fact]
-    public void Admin_IsNotCountedAsParticipant()
+    public void Admin_IsCountedOnceAcrossConnections()
     {
         var session = NewSession();
         Join(session, "alice");
         Join(session, "host", isAdmin: true);
+        session.Connect("host", "host-second", isAdmin: true);
 
+        Assert.Equal(2, session.Snapshot().OnlineCount);
+        session.Disconnect("host-conn");
+        Assert.Equal(2, session.Snapshot().OnlineCount);
+        session.Disconnect("host-second");
         Assert.Equal(1, session.Snapshot().OnlineCount);
+    }
+
+    [Fact]
+    public void AdminVote_UpdatesCountsResultsAndResets()
+    {
+        var session = NewSession();
+        Join(session, "host", isAdmin: true);
+        session.Vote(Join(session, "alice"), 6);
+        Assert.True(session.SetAdminVote(10));
+        Assert.False(session.SetAdminVote(11));
+        Assert.Equal(2, session.Snapshot().OnlineCount);
+        Assert.Equal(2, session.Snapshot().VotedCount);
+        Assert.Null(session.Snapshot().Average);
+        session.Reveal();
+        Assert.Equal(8, session.Snapshot().Average);
+        Assert.Equal(1, session.Snapshot().Distribution![9]);
+        Assert.False(session.SetAdminVote(null));
+        session.Restart();
+        Assert.Equal(0, session.Snapshot().VotedCount);
+    }
+
+    [Fact]
+    public void AdminVote_CanBeClearedBeforeReveal()
+    {
+        var session = NewSession();
+        Join(session, "host", isAdmin: true);
+        session.SetAdminVote(3);
+        Assert.True(session.SetAdminVote(null));
+        Assert.Equal(0, session.Snapshot().VotedCount);
+        session.Reveal();
+        Assert.Null(session.Snapshot().Average);
     }
 
     [Fact]
@@ -214,13 +250,13 @@ public class VotingSessionTests
         session.Vote(alice, 5);
         session.Disconnect("alice-conn");
 
-        // Пока идёт отсрочка, ушедший всё ещё считается присутствующим:
-        // перезагрузка страницы не должна дёргать счётчики.
+        // Голос сохраняется на время отсрочки, но участник уже не онлайн.
         _time.Advance(TimeSpan.FromSeconds(10));
         Assert.False(session.SweepDepartures(TimeSpan.FromSeconds(20)));
 
         var state = session.Snapshot();
-        Assert.Equal(1, state.OnlineCount);
+        Assert.Equal(0, state.OnlineCount);
+        Assert.Equal(1, state.TotalCount);
         Assert.Equal(1, state.VotedCount);
     }
 
@@ -267,10 +303,43 @@ public class VotingSessionTests
         session.Disconnect("alice-conn");
 
         _time.Advance(TimeSpan.FromMinutes(5));
-        Assert.False(session.SweepDepartures(TimeSpan.FromSeconds(20)));
+        Assert.True(session.SweepDepartures(TimeSpan.FromSeconds(20)));
 
         var state = session.Snapshot();
+        Assert.Equal(0, state.OnlineCount);
+        Assert.Equal(1, state.TotalCount);
         Assert.Equal(1, state.VotedCount);
         Assert.Equal(9d, state.Average);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NonVoter_LeavesOnlineImmediately_EvenAfterReveal(bool revealFirst)
+    {
+        var session = NewSession();
+        Join(session, "alice");
+        Join(session, "bob");
+        if (revealFirst) session.Reveal();
+        session.Disconnect("alice-conn");
+        Assert.Equal(1, session.Snapshot().OnlineCount);
+        if (!revealFirst) session.Reveal();
+        _time.Advance(TimeSpan.FromSeconds(25));
+        Assert.True(session.SweepDepartures(TimeSpan.FromSeconds(20)));
+        Assert.Equal(1, session.Snapshot().TotalCount);
+        Assert.Equal(0, session.Snapshot().VotedCount);
+    }
+
+    [Fact]
+    public void Restart_DoesNotKeepDisconnectedParticipantOnline()
+    {
+        var session = NewSession();
+        Join(session, "alice");
+        session.Disconnect("alice-conn");
+        session.Restart();
+        Assert.Equal(0, session.Snapshot().OnlineCount);
+        _time.Advance(TimeSpan.FromSeconds(25));
+        Assert.True(session.SweepDepartures(TimeSpan.FromSeconds(20)));
+        Assert.Equal(0, session.Snapshot().TotalCount);
     }
 }
