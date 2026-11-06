@@ -2,117 +2,41 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace SprintScore.Voting;
 
-/// <summary>
-/// Хаб голосования. Участник подключается с <c>participantId</c> (GUID из localStorage),
-/// ведущий — дополнительно с <c>role=admin</c>.
-/// </summary>
-public sealed class VotingHub : Hub
+public sealed class VotingHub(VotingSession session) : Hub
 {
-    /// <summary>Событие: состояние сессии изменилось. Рассылается всем.</summary>
-    public const string StateChanged = "StateChanged";
-
-    /// <summary>Событие: личное состояние подключившегося. Отправляется только ему.</summary>
-    public const string Sync = "Sync";
-
-    private readonly VotingSession _session;
-
-    public VotingHub(VotingSession session) => _session = session;
-
     public override async Task OnConnectedAsync()
     {
-        var participantId = GetParticipantId();
-        if (participantId is null)
-        {
-            Context.Abort();
-            return;
-        }
-
-        var self = _session.Connect(participantId, Context.ConnectionId, IsAdmin());
-        await Clients.Caller.SendAsync(Sync, self);
-        await BroadcastAsync();
+        var id = ParticipantId();
+        if (id is null) { Context.Abort(); return; }
+        session.Connect(id, Context.ConnectionId, IsAdmin());
+        await Publish(id => Clients.Client(id), session);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        _session.Disconnect(Context.ConnectionId);
-        await BroadcastAsync();
+        session.Disconnect(Context.ConnectionId);
+        await Publish(id => Clients.Client(id), session);
     }
 
-    /// <summary>Подтвердить оценку.</summary>
-    public async Task Vote(int score)
+    public Task<string> Vote(int round, int score) => Change("Vote", round, score, false);
+    public Task<string> RetractVote(int round) => Change("RetractVote", round, null, false);
+    public Task<string> SetAdminVote(int round, int? score) => Change("SetAdminVote", round, score, true);
+    public Task<string> Reveal(int round, int? score) => Change("Reveal", round, score, true);
+    public Task<string> Restart(int round) => Change("Restart", round, null, true);
+
+    private async Task<string> Change(string action, int round, int? score, bool admin)
     {
-        var participantId = GetParticipantId();
-        if (participantId is null || IsAdmin())
-        {
-            throw new HubException("Голосовать может только участник.");
-        }
-
-        if (score is < VotingSession.MinScore or > VotingSession.MaxScore)
-        {
-            throw new HubException($"Оценка должна быть от {VotingSession.MinScore} до {VotingSession.MaxScore}.");
-        }
-
-        if (_session.Vote(participantId, score))
-        {
-            await BroadcastAsync();
-        }
+        var id = ParticipantId();
+        if (id is null || IsAdmin() != admin) throw new HubException("Действие недоступно для этой роли.");
+        var result = session.Apply(action, round, id, score);
+        await Publish(id => Clients.Client(id), session);
+        return result;
     }
 
-    /// <summary>Снять свой голос и проголосовать заново.</summary>
-    public async Task RetractVote()
-    {
-        var participantId = GetParticipantId();
-        if (participantId is not null && _session.RetractVote(participantId))
-        {
-            await BroadcastAsync();
-        }
-    }
+    // Личная оценка отправляется только владельцу; ведущим — только оценка ведущего.
+    public static Task Publish(Func<string, IClientProxy> client, VotingSession session) =>
+        Task.WhenAll(session.Updates().Select(x => client(x.Connection).SendAsync("Update", x.Update)));
 
-    public async Task SetAdminVote(int? score)
-    {
-        RequireAdmin();
-        if (score.HasValue && score is < VotingSession.MinScore or > VotingSession.MaxScore)
-            throw new HubException("Оценка должна быть от 1 до 10.");
-        if (_session.SetAdminVote(score))
-            await BroadcastAsync();
-    }
-
-    /// <summary>Завершить голосование и раскрыть результаты. Только для ведущего.</summary>
-    public async Task Reveal()
-    {
-        RequireAdmin();
-        _session.Reveal();
-        await BroadcastAsync();
-    }
-
-    /// <summary>Сбросить голоса и начать новый раунд. Только для ведущего.</summary>
-    public async Task Restart()
-    {
-        RequireAdmin();
-        _session.Restart();
-        await BroadcastAsync();
-    }
-
-    private Task BroadcastAsync() => Clients.All.SendAsync(StateChanged, _session.Snapshot());
-
-    private string? GetParticipantId()
-    {
-        var raw = Context.GetHttpContext()?.Request.Query["participantId"].ToString();
-        return Guid.TryParse(raw, out var id) ? id.ToString("N") : null;
-    }
-
-    private bool IsAdmin() =>
-        Context.GetHttpContext()?.Request.Query["role"].ToString() == "admin";
-
-    /// <remarks>
-    /// Это не защита: по требованию ведущим становится любой, кто открыл /admin, без аутентификации.
-    /// Проверка лишь не даёт странице участника случайно вызвать управляющие методы.
-    /// </remarks>
-    private void RequireAdmin()
-    {
-        if (!IsAdmin())
-        {
-            throw new HubException("Завершать голосование может только ведущий.");
-        }
-    }
+    private string? ParticipantId() => Guid.TryParse(Context.GetHttpContext()?.Request.Query["participantId"], out var id) ? id.ToString("N") : null;
+    private bool IsAdmin() => Context.GetHttpContext()?.Request.Query["role"].ToString() == "admin";
 }

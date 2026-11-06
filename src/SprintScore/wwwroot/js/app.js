@@ -10,6 +10,9 @@
     var committed = null;  // подтверждённая оценка (пришла с сервера или только что отправлена)
     var round = null;      // номер раунда, к которому относится committed
     var revealed = false;
+    var revision = -1;
+    var adminDirty = false;
+    var edit = 0;
 
     var el = {
         cards: Array.prototype.slice.call(document.querySelectorAll(".score__card")),
@@ -32,8 +35,10 @@
     /** Стабильный идентификатор участника: переживает F5 и объединяет вкладки одного человека. */
     function participantId() {
         var id = localStorage.getItem(STORAGE_KEY);
-        if (!id) {
-            id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+        if (!id || !/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(id)) {
+            id = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, function (c) {
+                return (Number(c) ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (Number(c) / 4)))).toString(16);
+            });
             localStorage.setItem(STORAGE_KEY, id);
         }
         return id;
@@ -52,36 +57,27 @@
         .withAutomaticReconnect()
         .build();
 
-    hub.on("Sync", function (self) {
-        round = self.round;
-        if (IS_ADMIN) {
-            el.adminVote.value = self.myVote === null ? "" : String(self.myVote);
-            updateAdminStatus();
-            render();
-            return;
-        }
-        committed = self.myVote;
-        selected = self.myVote;
-        render();
-    });
-
-    hub.on("StateChanged", function (state) {
-        // Ведущий нажал «Заново» — сбрасываем свой выбор.
-        if (round !== null && state.round !== round) {
-            selected = null;
-            committed = null;
-            if (IS_ADMIN) {
-                el.adminVote.value = "";
-                updateAdminStatus();
-            }
-        }
+    hub.on("Update", function (update) {
+        if (update.revision <= revision) return;
+        revision = update.revision;
+        var state = update.state;
+        if (round !== state.round) { selected = null; adminDirty = false; edit++; }
         round = state.round;
         revealed = state.revealed;
+        if (IS_ADMIN) {
+            if (!adminDirty || revealed) {
+                el.adminVote.value = update.self.myVote === null ? "" : String(update.self.myVote);
+                updateAdminStatus();
+            }
+        } else {
+            committed = update.self.myVote;
+            if (committed !== null) selected = committed;
+        }
         applyState(state);
         render();
     });
 
-    hub.onreconnecting(function () { el.banner.hidden = false; });
+    hub.onreconnecting(function () { revision = -1; el.banner.hidden = false; });
     hub.onreconnected(function () { el.banner.hidden = true; });
     hub.onclose(function () {
         el.banner.hidden = false;
@@ -178,19 +174,17 @@
         });
     });
 
-    /** Вызывает метод хаба; onOk выполняется только при успехе. */
-    function invoke(method, arg, onOk) {
-        var call = arg === undefined ? hub.invoke(method) : hub.invoke(method, arg);
-        return call
-            .then(function () {
-                if (onOk) {
-                    onOk();
-                }
-            })
-            .catch(function (err) {
-                console.error(err);
-                el.hint.textContent = "Не удалось отправить действие. Попробуйте ещё раз.";
-            });
+    function invoke(method, expectedRound, value) {
+        var args = [method, expectedRound];
+        if (method === "Vote" || method === "SetAdminVote" || method === "Reveal") args.push(value);
+        return hub.invoke.apply(hub, args).then(function (result) {
+            if (result !== "accepted") throw new Error(result);
+        });
+    }
+
+    function showError(err) {
+        console.error(err);
+        el.hint.textContent = "Действие не принято. Проверьте соединение и текущий раунд.";
     }
 
     function adminValue() {
@@ -208,46 +202,50 @@
 
     if (!IS_ADMIN) {
         el.confirm.addEventListener("click", function () {
-            if (selected === null) {
-                return;
-            }
-            var value = selected;
-            invoke("Vote", value, function () {
-                committed = value;
-                render();
-            });
+            if (selected !== null) invoke("Vote", round, selected).catch(showError);
         });
-
         el.retract.addEventListener("click", function () {
-            invoke("RetractVote", undefined, function () {
-                committed = null;
-                render();
-            });
+            invoke("RetractVote", round).catch(showError);
         });
     } else {
         var adminQueue = Promise.resolve();
         function enqueue(method, value) {
-            adminQueue = adminQueue.then(function () { return invoke(method, value); });
+            var expectedRound = round;
+            var expectedEdit = edit;
+            adminQueue = adminQueue.catch(function () {}).then(function () {
+                return invoke(method, expectedRound, value);
+            });
+            adminQueue.then(function () {
+                if (round === expectedRound && edit === expectedEdit) {
+                    adminDirty = false;
+                    if (method === "SetAdminVote" && value !== null) el.adminStatus.textContent = "Оценка сохранена";
+                }
+            }).catch(function (err) {
+                showError(err);
+                if (round === expectedRound && edit === expectedEdit) {
+                    el.adminStatus.textContent = "Не удалось сохранить";
+                    el.adminStatus.classList.add("is-error");
+                }
+            });
         }
         el.adminVote.addEventListener("input", function () {
+            adminDirty = true; edit++;
             updateAdminStatus();
             enqueue("SetAdminVote", adminValue());
         });
         el.adminClear.addEventListener("click", function () {
             el.adminVote.value = "";
+            adminDirty = true; edit++;
             updateAdminStatus();
             enqueue("SetAdminVote", null);
             el.adminVote.focus();
         });
         el.reveal.addEventListener("click", function () {
-            if (adminValue() === null) { el.adminVote.value = ""; updateAdminStatus(); }
-            enqueue("Reveal");
+            var value = adminValue();
+            if (value === null) { el.adminVote.value = ""; updateAdminStatus(); }
+            enqueue("Reveal", value);
         });
-        el.restart.addEventListener("click", function () {
-            el.adminVote.value = "";
-            updateAdminStatus();
-            enqueue("Restart");
-        });
+        el.restart.addEventListener("click", function () { enqueue("Restart"); });
     }
 
     render();

@@ -342,4 +342,55 @@ public class VotingSessionTests
         Assert.True(session.SweepDepartures(TimeSpan.FromSeconds(20)));
         Assert.Equal(0, session.Snapshot().TotalCount);
     }
+    [Theory]
+    [InlineData("Vote")]
+    [InlineData("RetractVote")]
+    [InlineData("SetAdminVote")]
+    [InlineData("Reveal")]
+    [InlineData("Restart")]
+    public void StaleCommands_DoNotChangeNewRound(string action)
+    {
+        var session = NewSession();
+        session.Restart();
+        Assert.Equal("stale", session.Apply(action, 1, "alice", 8));
+        Assert.Equal(2, session.Snapshot().Round);
+        Assert.False(session.Snapshot().Revealed);
+        Assert.Equal(0, session.Snapshot().VotedCount);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(10)]
+    public void Reveal_AtomicallyReplacesAdminVote(int? score)
+    {
+        var session = NewSession();
+        session.SetAdminVote(2);
+        Assert.Equal("accepted", session.Apply("Reveal", 1, "host", score));
+        Assert.True(session.Snapshot().Revealed);
+        Assert.Equal(score.HasValue ? 1 : 0, session.Snapshot().VotedCount);
+        Assert.Equal(score.HasValue ? (double?)score.Value : null, session.Snapshot().Average);
+        Assert.Equal("closed", session.Apply("SetAdminVote", 1, "host", 4));
+    }
+
+    [Fact]
+    public void PersonalUpdates_ContainOnlyOwnersVote()
+    {
+        var session = NewSession();
+        session.Connect("alice", "a1", false);
+        session.Connect("alice", "a2", false);
+        session.Connect("bob", "b", false);
+        session.Connect("host", "h", true);
+        session.Vote("alice", 8);
+        session.SetAdminVote(3);
+        var updates = session.Updates();
+        foreach (var (connection, update) in updates)
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(update));
+            var vote = json.RootElement.GetProperty("self").GetProperty("MyVote");
+            if (connection.StartsWith("a")) Assert.Equal(8, vote.GetInt32());
+            else if (connection == "h") Assert.Equal(3, vote.GetInt32());
+            else Assert.Equal(System.Text.Json.JsonValueKind.Null, vote.ValueKind);
+            Assert.Equal(System.Text.Json.JsonValueKind.Null, json.RootElement.GetProperty("state").GetProperty("Distribution").ValueKind);
+        }
+    }
 }

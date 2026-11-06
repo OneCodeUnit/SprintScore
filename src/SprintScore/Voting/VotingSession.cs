@@ -29,6 +29,42 @@ public sealed class VotingSession
     private bool _revealed;
     private int? _adminVote;
     private int _round = 1;
+    private long _revision;
+
+    public string Apply(string action, int expectedRound, string participantId, int? score = null)
+    {
+        lock (_gate)
+        {
+            if (expectedRound != _round) return "stale";
+            if (action != "Restart" && _revealed) return "closed";
+            if ((action == "Vote" && !score.HasValue) || (score.HasValue && score is < MinScore or > MaxScore)) return "invalid";
+            switch (action)
+            {
+                case "Vote": Vote(participantId, score!.Value); break;
+                case "RetractVote": RetractVote(participantId); break;
+                case "SetAdminVote": SetAdminVote(score); break;
+                case "Reveal": _adminVote = score; Reveal(); break;
+                case "Restart": Restart(); break;
+                default: return "invalid";
+            }
+            return "accepted";
+        }
+    }
+
+    public List<(string Connection, object Update)> Updates()
+    {
+        lock (_gate)
+        {
+            var state = Snapshot();
+            var revision = ++_revision;
+            var updates = new List<(string, object)>();
+            foreach (var (connection, owner) in _owners)
+                updates.Add((connection, new { state, revision, self = new SelfStateDto(_votes.TryGetValue(owner, out var vote) ? vote : null, _round) }));
+            foreach (var connection in _adminConnections)
+                updates.Add((connection, new { state, revision, self = new SelfStateDto(_adminVote, _round) }));
+            return updates;
+        }
+    }
 
     public VotingSession(TimeProvider time) => _time = time;
 

@@ -31,7 +31,7 @@ public sealed class PresenceSweeper : BackgroundService
         {
             if (_session.SweepDepartures(Grace))
             {
-                await _hub.Clients.All.SendAsync(VotingHub.StateChanged, _session.Snapshot(), stoppingToken);
+                await VotingHub.Publish(id => _hub.Clients.Client(id), _session);
             }
         }
     }

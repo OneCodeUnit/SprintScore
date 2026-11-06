@@ -58,6 +58,11 @@ cd SprintScore
 docker compose up -d --build
 ```
 
+Корневой compose содержит `build: .` и публикует порт 8080. Серверный вариант для
+существующего Caddy находится в `deploy/`: скачайте оттуда compose и `.env.example`,
+сохраните образец как `.env` и задайте имя сети Caddy. Если вы уже запускаете сервис
+из клона репозитория за Caddy, используйте этот серверный compose вместо корневого.
+
 Теги всех сборок видны на странице пакета:
 [Packages → sprintscore](https://github.com/OneCodeUnit/SprintScore/pkgs/container/sprintscore).
 

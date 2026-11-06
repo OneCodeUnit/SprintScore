@@ -13,6 +13,7 @@
 Dockerfile
 .dockerignore
 docker-compose*.yml
+deploy/
 .env
 DEPLOY.md
 README.md
