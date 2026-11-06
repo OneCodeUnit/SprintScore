@@ -6,7 +6,7 @@ services:
     container_name: sprintscore
     restart: unless-stopped
     networks:
-      - ${CADDY_NETWORK}
+      - caddy
     logging:
       driver: json-file
       options:
