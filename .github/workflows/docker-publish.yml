@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Тег опубликованного релиза для восстановления образа, например 1.1'
+        required: true
+        type: string
   release:
     types: [published]
 
@@ -13,10 +18,39 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  release-info:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+      stable: ${{ steps.release.outputs.stable }}
+    steps:
+      - id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG")
+          test "$(jq -r '.draft' <<< "$release")" = false
+          tag=$(jq -r '.tag_name' <<< "$release")
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq '.sha')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "stable=$(jq -r '.prerelease | not' <<< "$release")" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: release-info
+    if: ${{ !cancelled() && (needs.release-info.result == 'success' || needs.release-info.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-info.outputs.sha || github.sha }}
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -26,18 +60,20 @@ jobs:
       - run: node --test tests/client/*.test.cjs
 
   publish:
-    needs: test
+    needs: [test, release-info]
     # Сериализуем продвижение latest между разными релизами.
     concurrency:
       group: image-publish-releases
       cancel-in-progress: false
-    if: github.event_name == 'release'
+    if: ${{ !cancelled() && needs.test.result == 'success' && needs.release-info.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-info.outputs.sha }}
 
       - uses: docker/setup-buildx-action@v4
 
@@ -53,8 +89,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           flavor: latest=false
           tags: |
-            type=sha,format=short
-            type=ref,event=tag
+            type=raw,value=sha-${{ needs.release-info.outputs.sha }}
+            type=raw,value=${{ needs.release-info.outputs.tag }}
 
       - id: build
         uses: docker/build-push-action@v7
@@ -67,12 +103,12 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Promote latest stable release
-        if: ${{ !github.event.release.prerelease }}
+        if: needs.release-info.outputs.stable == 'true'
         shell: bash
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.release-info.outputs.tag }}
         run: |
           set -euo pipefail
           latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')
