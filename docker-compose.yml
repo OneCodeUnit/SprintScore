@@ -2,11 +2,11 @@
 # по общей docker-сети. Имя сети задаётся в .env (CADDY_NETWORK).
 services:
   sprintscore:
-    image: ${SPRINTSCORE_IMAGE:-ghcr.io/onecodeunit/sprintscore:latest}
+    image: ${SPRINTSCORE_IMAGE}
     container_name: sprintscore
     restart: unless-stopped
     networks:
-      - caddy
+      - ${CADDY_NETWORK}
     logging:
       driver: json-file
       options:
@@ -15,5 +15,5 @@ services:
 
 networks:
   caddy:
-    name: ${CADDY_NETWORK:-caddy}
+    name: ${CADDY_NETWORK}
     external: true
