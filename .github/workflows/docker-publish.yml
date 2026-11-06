@@ -3,10 +3,11 @@ name: Build and publish image
 on:
   push:
     branches: [master]
-    tags: ["v*"]
   pull_request:
     branches: [master]
   workflow_dispatch:
+  release:
+    types: [published]
 
 env:
   REGISTRY: ghcr.io
@@ -26,12 +27,11 @@ jobs:
 
   publish:
     needs: test
-    # Не отменяем уже начатую запись тега; публикации ветки выполняются последовательно.
+    # Сериализуем продвижение latest между разными релизами.
     concurrency:
-      group: image-publish-${{ github.ref }}
+      group: image-publish-releases
       cancel-in-progress: false
-    # В пулл-реквестах образ не публикуем — только прогоняем тесты.
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,16 +66,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Promote current master to latest
-        if: github.ref == 'refs/heads/master'
+      - name: Promote latest stable release
+        if: ${{ !github.event.release.prerelease }}
         shell: bash
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          head_sha=$(git ls-remote origin refs/heads/master | cut -f1)
-          if [ "$head_sha" != "$GITHUB_SHA" ]; then
-            echo "Skipping latest: master has advanced."
+          latest_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '.tag_name')
+          if [ "$latest_tag" != "$RELEASE_TAG" ]; then
+            echo "Skipping latest: another release is current."
             exit 0
           fi
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
