@@ -2,6 +2,8 @@
 (function () {
     "use strict";
 
+    if (!["admin", "participant"].includes(document.body.dataset.role)) return;
+
     var IS_ADMIN = document.body.dataset.role === "admin";
     var STORAGE_KEY = "sprintscore.participantId";
 
@@ -13,6 +15,7 @@
     var revision = -1;
     var adminDirty = false;
     var edit = 0;
+    var serverAdminVote = null;
 
     var el = {
         cards: Array.prototype.slice.call(document.querySelectorAll(".score__card")),
@@ -65,6 +68,7 @@
         round = state.round;
         revealed = state.revealed;
         if (IS_ADMIN) {
+            serverAdminVote = update.self.myVote;
             if (!adminDirty || revealed) {
                 el.adminVote.value = update.self.myVote === null ? "" : String(update.self.myVote);
                 updateAdminStatus();
@@ -213,12 +217,19 @@
             var expectedRound = round;
             var expectedEdit = edit;
             adminQueue = adminQueue.catch(function () {}).then(function () {
+                if (method === "Reveal" && expectedEdit === edit && !adminDirty) value = adminValue();
                 return invoke(method, expectedRound, value);
             });
             adminQueue.then(function () {
                 if (round === expectedRound && edit === expectedEdit) {
                     adminDirty = false;
-                    if (method === "SetAdminVote" && value !== null) el.adminStatus.textContent = "Оценка сохранена";
+                    if (method === "SetAdminVote") {
+                        if (serverAdminVote !== value || adminValue() !== null || el.adminVote.value === "") {
+                            el.adminVote.value = serverAdminVote === null ? "" : String(serverAdminVote);
+                        }
+                        updateAdminStatus();
+                        if (serverAdminVote !== null) el.adminStatus.textContent = "Оценка сохранена";
+                    }
                 }
             }).catch(function (err) {
                 showError(err);

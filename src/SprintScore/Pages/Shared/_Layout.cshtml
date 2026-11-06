@@ -1,5 +1,5 @@
 @{
-    var role = (ViewData["Role"] as string) ?? "participant";
+    var role = (ViewData["Role"] as string) ?? "none";
 }
 <!DOCTYPE html>
 <html lang="ru">
@@ -16,7 +16,10 @@
         @RenderBody()
     </main>
 
-    <script src="~/lib/signalr/signalr.min.js"></script>
-    <script src="~/js/app.js" asp-append-version="true"></script>
+    @if (role is "participant" or "admin")
+    {
+        <script src="~/lib/signalr/signalr.min.js"></script>
+        <script src="~/js/app.js" asp-append-version="true"></script>
+    }
 </body>
 </html>

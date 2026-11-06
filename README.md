@@ -96,6 +96,12 @@ dotnet run --project src/SprintScore
 dotnet test
 ```
 
+Клиентские регрессионные тесты (нужен Node.js):
+
+```bash
+node --test tests/client/*.test.cjs
+```
+
 ## Стек
 
 - ASP.NET Core 10, Razor Pages
