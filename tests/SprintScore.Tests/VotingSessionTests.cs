@@ -120,21 +120,55 @@ public class VotingSessionTests
         Assert.Equal(1, session.Snapshot().OnlineCount);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SwitchingToAdmin_CountsOnePerson(bool disconnectFirst)
+    {
+        var session = NewSession();
+        session.Connect("alice", "participant-tab", false);
+        if (disconnectFirst) session.Disconnect("participant-tab");
+        session.Connect("alice", "admin-tab", true);
+
+        var state = session.Snapshot();
+        Assert.Equal((1, 0, 1), (state.OnlineCount, state.VotedCount, state.TotalCount));
+        if (!disconnectFirst) session.Disconnect("participant-tab");
+        _time.Advance(TimeSpan.FromMinutes(1));
+        session.SweepDepartures(TimeSpan.FromSeconds(20));
+        state = session.Snapshot();
+        Assert.Equal((1, 0, 1), (state.OnlineCount, state.VotedCount, state.TotalCount));
+    }
+
+    [Fact]
+    public void SwitchingToAdmin_UpdatesExistingVote()
+    {
+        var session = NewSession();
+        session.Connect("alice", "participant-tab", false);
+        session.Apply("Vote", 1, "alice", 3);
+        var self = session.Connect("alice", "admin-tab", true);
+        Assert.Equal(3, self.MyVote);
+        session.Apply("Reveal", 1, "alice", 8);
+        var state = session.Snapshot();
+        Assert.Equal(1, state.VotedCount);
+        Assert.Equal(1, state.TotalCount);
+        Assert.Equal(8d, state.Average);
+    }
+
     [Fact]
     public void AdminVote_UpdatesCountsResultsAndResets()
     {
         var session = NewSession();
         Join(session, "host", isAdmin: true);
         session.Vote(Join(session, "alice"), 6);
-        Assert.True(session.SetAdminVote(10));
-        Assert.False(session.SetAdminVote(11));
+        Assert.Equal("accepted", session.Apply("SetAdminVote", 1, "host", 10));
+        Assert.Equal("invalid", session.Apply("SetAdminVote", 1, "host", 11));
         Assert.Equal(2, session.Snapshot().OnlineCount);
         Assert.Equal(2, session.Snapshot().VotedCount);
         Assert.Null(session.Snapshot().Average);
         session.Reveal();
         Assert.Equal(8, session.Snapshot().Average);
         Assert.Equal(1, session.Snapshot().Distribution![9]);
-        Assert.False(session.SetAdminVote(null));
+        Assert.Equal("closed", session.Apply("SetAdminVote", 1, "host", null));
         session.Restart();
         Assert.Equal(0, session.Snapshot().VotedCount);
     }
@@ -144,8 +178,8 @@ public class VotingSessionTests
     {
         var session = NewSession();
         Join(session, "host", isAdmin: true);
-        session.SetAdminVote(3);
-        Assert.True(session.SetAdminVote(null));
+        session.Apply("SetAdminVote", 1, "host", 3);
+        Assert.Equal("accepted", session.Apply("SetAdminVote", 1, "host", null));
         Assert.Equal(0, session.Snapshot().VotedCount);
         session.Reveal();
         Assert.Null(session.Snapshot().Average);
@@ -322,7 +356,8 @@ public class VotingSessionTests
         Join(session, "bob");
         if (revealFirst) session.Reveal();
         session.Disconnect("alice-conn");
-        Assert.Equal(1, session.Snapshot().OnlineCount);
+        var immediately = session.Snapshot();
+        Assert.Equal((1, 0, 1), (immediately.OnlineCount, immediately.VotedCount, immediately.TotalCount));
         if (!revealFirst) session.Reveal();
         _time.Advance(TimeSpan.FromSeconds(25));
         Assert.True(session.SweepDepartures(TimeSpan.FromSeconds(20)));
@@ -364,7 +399,7 @@ public class VotingSessionTests
     public void Reveal_AtomicallyReplacesAdminVote(int? score)
     {
         var session = NewSession();
-        session.SetAdminVote(2);
+        session.Apply("SetAdminVote", 1, "host", 2);
         Assert.Equal("accepted", session.Apply("Reveal", 1, "host", score));
         Assert.True(session.Snapshot().Revealed);
         Assert.Equal(score.HasValue ? 1 : 0, session.Snapshot().VotedCount);
@@ -381,7 +416,7 @@ public class VotingSessionTests
         session.Connect("bob", "b", false);
         session.Connect("host", "h", true);
         session.Vote("alice", 8);
-        session.SetAdminVote(3);
+        session.Apply("SetAdminVote", 1, "host", 3);
         var updates = session.Updates();
         foreach (var (connection, update) in updates)
         {

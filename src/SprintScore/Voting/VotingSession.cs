@@ -16,7 +16,6 @@ public sealed class VotingSession
 
     /// <summary>connectionId → participantId. Нужен, чтобы по обрыву связи найти участника.</summary>
     private readonly Dictionary<string, string> _owners = new();
-    private readonly HashSet<string> _adminConnections = new();
 
     /// <summary>participantId → подтверждённая оценка.</summary>
     private readonly Dictionary<string, int> _votes = new();
@@ -27,7 +26,6 @@ public sealed class VotingSession
     private readonly TimeProvider _time;
 
     private bool _revealed;
-    private int? _adminVote;
     private int _round = 1;
     private long _revision;
 
@@ -42,8 +40,8 @@ public sealed class VotingSession
             {
                 case "Vote": Vote(participantId, score!.Value); break;
                 case "RetractVote": RetractVote(participantId); break;
-                case "SetAdminVote": SetAdminVote(score); break;
-                case "Reveal": _adminVote = score; Reveal(); break;
+                case "SetAdminVote": SetOptionalVote(participantId, score); break;
+                case "Reveal": SetOptionalVote(participantId, score); Reveal(); break;
                 case "Restart": Restart(); break;
                 default: return "invalid";
             }
@@ -60,8 +58,6 @@ public sealed class VotingSession
             var updates = new List<(string, object)>();
             foreach (var (connection, owner) in _owners)
                 updates.Add((connection, new { state, revision, self = new SelfStateDto(_votes.TryGetValue(owner, out var vote) ? vote : null, _round) }));
-            foreach (var connection in _adminConnections)
-                updates.Add((connection, new { state, revision, self = new SelfStateDto(_adminVote, _round) }));
             return updates;
         }
     }
@@ -76,12 +72,6 @@ public sealed class VotingSession
     {
         lock (_gate)
         {
-            if (isAdmin)
-            {
-                _adminConnections.Add(connectionId);
-                return new SelfStateDto(_adminVote, _round);
-            }
-
             if (!_connections.TryGetValue(participantId, out var set))
             {
                 _connections[participantId] = set = new HashSet<string>();
@@ -104,7 +94,6 @@ public sealed class VotingSession
     {
         lock (_gate)
         {
-            if (_adminConnections.Remove(connectionId)) return;
             if (!_owners.Remove(connectionId, out var participantId))
             {
                 return;
@@ -149,15 +138,10 @@ public sealed class VotingSession
         }
     }
 
-    public bool SetAdminVote(int? score)
+    private void SetOptionalVote(string participantId, int? score)
     {
-        lock (_gate)
-        {
-            if (_revealed || (score.HasValue && score is < MinScore or > MaxScore) || _adminVote == score)
-                return false;
-            _adminVote = score;
-            return true;
-        }
+        if (score.HasValue) _votes[participantId] = score.Value;
+        else _votes.Remove(participantId);
     }
 
     /// <summary>Завершает голосование и раскрывает результаты. Результаты после этого заморожены.</summary>
@@ -175,7 +159,6 @@ public sealed class VotingSession
         lock (_gate)
         {
             _votes.Clear();
-            _adminVote = null;
             _revealed = false;
             _round++;
         }
@@ -215,7 +198,7 @@ public sealed class VotingSession
         {
             double? average = null;
             int[]? distribution = null;
-            var scores = _adminVote.HasValue ? _votes.Values.Append(_adminVote.Value).ToArray() : _votes.Values.ToArray();
+            var scores = _votes.Values;
 
             if (_revealed)
             {
@@ -225,7 +208,7 @@ public sealed class VotingSession
                     distribution[score - 1]++;
                 }
 
-                if (scores.Length > 0)
+                if (scores.Count > 0)
                 {
                     average = Math.Round(scores.Average(), 2, MidpointRounding.AwayFromZero);
                 }
@@ -234,10 +217,10 @@ public sealed class VotingSession
             return new VotingStateDto(
                 Round: _round,
                 Revealed: _revealed,
-                OnlineCount: _connections.Count + (_adminConnections.Count > 0 ? 1 : 0),
-                VotedCount: scores.Length,
+                OnlineCount: _connections.Count,
+                VotedCount: scores.Count,
                 // Сохранённые голоса учитываются в общем числе участников, но не в онлайне.
-                TotalCount: _connections.Keys.Union(_pendingDepartures.Keys).Union(_votes.Keys).Count() + (_adminConnections.Count > 0 || _adminVote.HasValue ? 1 : 0),
+                TotalCount: _connections.Keys.Union(_votes.Keys).Count(),
                 Average: average,
                 Distribution: distribution);
         }
