@@ -90,7 +90,8 @@ HTTPS образ не терминирует: чтобы открыть серв
   без настроенного binfmt он не стартует. В этом случае соберите образ из исходников.
 ## Запуск из исходников
 
-Нужен [.NET SDK 10](https://dotnet.microsoft.com/download/dotnet/10.0).
+Для сборки подойдёт текущий стабильный [.NET SDK](https://dotnet.microsoft.com/download).
+Для запуска приложения и тестов нужен ASP.NET Core Runtime 10.0.
 
 ```bash
 dotnet run --project src/SprintScore

@@ -1,22 +1,25 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { resolve } = require('node:path');
 const { createInterface } = require('node:readline');
 const { chromium } = require('playwright-core');
 
+const projectDirectory = resolve(__dirname, '../../src/SprintScore');
+let serverAssembly;
 let browser;
 before(async () => {
+    serverAssembly = execFileSync('dotnet', ['msbuild', '-nologo', '-p:Configuration=Release', '-getProperty:TargetPath'],
+        { cwd: projectDirectory, encoding: 'utf8', windowsHide: true }).trim();
     browser = await chromium.launch({ channel: process.env.SPRINTSCORE_BROWSER_CHANNEL || undefined });
 });
 after(async () => { await browser?.close(); });
 
 // Each test owns its in-memory round and a port assigned by Kestrel.
 async function startServer(t) {
-    const cwd = resolve(__dirname, '../../src/SprintScore');
-    const server = spawn('dotnet', ['bin/Release/net10.0/SprintScore.dll', '--urls', 'http://127.0.0.1:0'],
-        { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'inherit'] });
+    const server = spawn('dotnet', [serverAssembly, '--urls', 'http://127.0.0.1:0'],
+        { cwd: projectDirectory, windowsHide: true, stdio: ['ignore', 'pipe', 'inherit'] });
     const closed = once(server, 'close');
     t.after(async () => { server.kill(); await closed; });
     const lines = createInterface({ input: server.stdout });

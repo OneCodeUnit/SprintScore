@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- сборка -----------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:latest AS build
 WORKDIR /src
 
 # Сначала только файл проекта: слой с restore переживает правки кода.

@@ -54,12 +54,15 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          # The net10.0 tests need ASP.NET Core 10 even when a newer SDK builds them.
+          dotnet-version: |
+            10.0.x
+            latest
 
       - run: dotnet test --configuration Release
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: current
       - run: node --test tests/client/*.test.cjs
       - run: npm install --prefix tests/e2e --no-package-lock
       - run: npx --no-install playwright-core install --with-deps chromium
@@ -103,6 +106,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
