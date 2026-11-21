@@ -110,6 +110,17 @@ dotnet test
 node --test tests/client/*.test.cjs
 ```
 
+Сквозные тесты запускают отдельный сервер на свободном локальном порту для каждого
+сценария и проверяют страницы и рассылку SignalR в Chromium. Из корня репозитория:
+
+```bash
+dotnet build src/SprintScore -c Release
+cd tests/e2e
+npm install --no-package-lock
+npx --no-install playwright-core install chromium
+node --test voting.test.cjs
+```
+
 ## Стек
 
 - ASP.NET Core 10, Razor Pages

@@ -57,7 +57,14 @@ jobs:
           dotnet-version: "10.0.x"
 
       - run: dotnet test --configuration Release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - run: node --test tests/client/*.test.cjs
+      - run: npm install --prefix tests/e2e --no-package-lock
+      - run: npx --no-install playwright-core install --with-deps chromium
+        working-directory: tests/e2e
+      - run: node --test tests/e2e/voting.test.cjs
 
   publish:
     needs: [test, release-info]

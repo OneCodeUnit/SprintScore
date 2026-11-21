@@ -17,7 +17,7 @@ function client(role = 'admin') {
     const hub = {
         on(name, fn) { events[name] = fn; },
         onreconnecting(fn) { events.reconnecting = fn; },
-        onreconnected() {}, onclose() {},
+        onreconnected(fn) { events.reconnected = fn; }, onclose() {},
         start() { starts++; return Promise.resolve(); },
         invoke(...args) {
             return new Promise((resolve, reject) => requests.push({ args, resolve, reject }));
@@ -90,4 +90,17 @@ test('failed saves are not shown as saved', async () => {
     await tick(); c.requests[0].reject(new Error('offline')); await tick();
     assert.equal(c.elements['admin-vote-status'].textContent, 'Не удалось сохранить');
     assert.equal(c.elements['admin-vote'].value, '8');
+});
+
+test('participant reconnect hides the banner and restores the current vote from a fresh snapshot', () => {
+    const c = client('participant');
+    c.update(9, 6);
+    c.events.reconnecting();
+    assert.equal(c.elements['reconnect-banner'].hidden, false);
+    c.update(1, 8);
+    c.events.reconnected();
+    assert.equal(c.elements['reconnect-banner'].hidden, true);
+    assert.equal(c.elements.pick.textContent, ', 8');
+    assert.equal(c.elements.confirm.hidden, true);
+    assert.equal(c.elements.retract.hidden, false);
 });
