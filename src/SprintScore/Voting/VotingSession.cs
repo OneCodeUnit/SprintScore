@@ -24,6 +24,7 @@ public sealed class VotingSession
     private readonly Dictionary<string, DateTimeOffset> _pendingDepartures = new();
 
     private readonly TimeProvider _time;
+    private readonly ILogger<VotingSession> _logger;
 
     private bool _revealed;
     private int _round = 1;
@@ -62,7 +63,11 @@ public sealed class VotingSession
         }
     }
 
-    public VotingSession(TimeProvider time) => _time = time;
+    public VotingSession(TimeProvider time, ILogger<VotingSession> logger)
+    {
+        _time = time;
+        _logger = logger;
+    }
 
     /// <summary>
     /// Регистрирует соединение участника или ведущего.
@@ -149,7 +154,23 @@ public sealed class VotingSession
     {
         lock (_gate)
         {
+            if (_revealed) return;
             _revealed = true;
+
+            var result = Snapshot();
+            var completedAt = _time.GetUtcNow();
+            if (result.Average is double average)
+            {
+                _logger.LogInformation(
+                    "Голосование №{Round} завершено {CompletedAt:yyyy-MM-dd HH:mm:ss zzz}. Проголосовало: {VotedCount}. Средняя оценка: {Average}.",
+                    result.Round, completedAt, result.VotedCount, average);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Голосование №{Round} завершено {CompletedAt:yyyy-MM-dd HH:mm:ss zzz}. Проголосовало: {VotedCount}. Средняя оценка отсутствует.",
+                    result.Round, completedAt, result.VotedCount);
+            }
         }
     }
 

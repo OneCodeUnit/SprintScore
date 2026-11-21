@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using SprintScore.Voting;
 
@@ -7,7 +9,37 @@ public class VotingSessionTests
 {
     private readonly FakeTimeProvider _time = new();
 
-    private VotingSession NewSession() => new(_time);
+    private VotingSession NewSession() => new(_time, NullLogger<VotingSession>.Instance);
+
+    [Fact]
+    public void Reveal_LogsFinalStatisticsOncePerRound()
+    {
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 21, 12, 34, 56, TimeSpan.Zero));
+        var logger = new RecordingLogger();
+        var session = new VotingSession(_time, logger);
+        session.Apply("Vote", 1, "participant", 7);
+        session.Apply("Reveal", 1, "admin", 8);
+        session.Reveal();
+        session.Restart();
+        session.Apply("Reveal", 2, "admin");
+
+        Assert.Equal(2, logger.Messages.Count);
+        Assert.Contains("2026-11-21 12:34:56 +00:00", logger.Messages[0]);
+        Assert.Contains("Проголосовало: 2. Средняя оценка: 7.5", logger.Messages[0]);
+        Assert.Contains("Проголосовало: 0. Средняя оценка отсутствует", logger.Messages[1]);
+    }
+
+    private sealed class RecordingLogger : ILogger<VotingSession>
+    {
+        public List<string> Messages { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => level == LogLevel.Information;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (IsEnabled(level)) Messages.Add(formatter(state, error));
+        }
+    }
 
     /// <summary>Подключает участника с одной вкладкой и сразу отдаёт его id.</summary>
     private static string Join(VotingSession session, string name, bool isAdmin = false)
