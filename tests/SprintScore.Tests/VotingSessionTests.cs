@@ -410,25 +410,31 @@ public class VotingSessionTests
         Assert.Equal(0, session.Snapshot().TotalCount);
     }
     [Theory]
-    [InlineData("Vote")]
-    [InlineData("RetractVote")]
-    [InlineData("SetAdminVote")]
-    [InlineData("Reveal")]
-    [InlineData("Restart")]
-    public void StaleCommands_DoNotChangeNewRound(string action)
+    [InlineData("Vote", 8)]
+    [InlineData("RetractVote", null)]
+    [InlineData("SetAdminVote", 8)]
+    [InlineData("Reveal", 8)]
+    [InlineData("Restart", null)]
+    public void StaleCommands_DoNotChangeNewRound(string action, int? score)
     {
         var session = NewSession();
         session.Restart();
-        Assert.Equal("stale", session.Apply(action, 1, "alice", 8));
-        Assert.Equal(2, session.Snapshot().Round);
-        Assert.False(session.Snapshot().Revealed);
-        Assert.Equal(0, session.Snapshot().VotedCount);
+        Join(session, "alice");
+        Assert.Equal("accepted", session.Apply("Vote", 2, "alice", 5));
+
+        Assert.Equal("stale", session.Apply(action, 1, "alice", score));
+
+        var state = session.Snapshot();
+        Assert.Equal(2, state.Round);
+        Assert.False(state.Revealed);
+        Assert.Equal(1, state.VotedCount);
+        Assert.Equal(5, session.Connect("alice", "second-tab", false).MyVote);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData(10)]
-    public void Reveal_AtomicallyReplacesAdminVote(int? score)
+    public void Reveal_UsesFinalAdminVoteAndClosesRound(int? score)
     {
         var session = NewSession();
         session.Apply("SetAdminVote", 1, "host", 2);
@@ -450,6 +456,7 @@ public class VotingSessionTests
         session.Vote("alice", 8);
         session.Apply("SetAdminVote", 1, "host", 3);
         var updates = session.Updates();
+        Assert.Equal(new[] { "a1", "a2", "b", "h" }, updates.Select(x => x.Connection).Order(StringComparer.Ordinal));
         foreach (var (connection, update) in updates)
         {
             using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(update));
