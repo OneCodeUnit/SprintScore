@@ -15,7 +15,7 @@ RUN dotnet publish src/SprintScore/SprintScore.csproj \
         --output /app/publish
 
 # ---- рантайм ----------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 
 # curl нужен только для HEALTHCHECK — в базовом образе его нет.
