@@ -18,6 +18,14 @@
     </main>
 
     <footer class="project-contacts">
+        @if (role == "participant")
+        {
+            <div><a href="~/admin">Стать ведущим</a></div>
+        }
+        else if (role == "admin")
+        {
+            <div><a href="~/">Стать участником</a></div>
+        }
         <div><a href="https://github.com/OneCodeUnit/SprintScore">Исходный код</a></div>
         <div>По проекту писать U_M1T58</div>
     </footer>
